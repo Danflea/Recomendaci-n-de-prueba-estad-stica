@@ -48,7 +48,7 @@ El proyecto se divide en dos componentes fundamentales que trabajan en conjunto:
 
 Este sistema ofrece una herramienta práctica y fácil de usar para la selección de pruebas estadísticas, combinando el poder de la lógica de Prolog con una interfaz de usuario intuitiva.
 
-Problemas y Soluciones Intentadas para la Generación del Ejecutable (Rama dev)
+# Problemas y Soluciones Intentadas para la Generación del Ejecutable (Rama dev)  
 Esta sección detalla los desafíos encontrados y las aproximaciones de solución durante el proceso de empaquetado del sistema experto en un archivo ejecutable (.exe) utilizando PyInstaller. La rama main contiene una versión funcional que no está optimizada para ser empaquetada fácilmente, mientras que la rama dev busca lograr un ejecutable autónomo.
 
 Objetivo: Crear un único archivo ejecutable (.exe) de la aplicación Python/Tkinter que integre PySwip y la base de conocimiento de Prolog, de modo que los usuarios puedan ejecutarla sin necesidad de instalar Python o PySwip directamente.
