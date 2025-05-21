@@ -34,7 +34,7 @@ class SistemaExpertoGUI:
 
         # Botón para rehacer la pregunta actual
         self.boton_rehacer = tk.Button(root, text="Rehacer Pregunta Actual", command=self.rehacer_pregunta_actual)
-        # Lo empaquetamos/desempaquetamos dinámicamente en mostrar_pregunta
+        # Inicialmente no empaquetado, se gestionará en mostrar_pregunta()
 
         self.resultado_texto = tk.Text(root, height=15, width=80, wrap="word", font=("Arial", 11))
         self.resultado_texto.pack(pady=10)
@@ -63,16 +63,13 @@ class SistemaExpertoGUI:
             rb = tk.Radiobutton(self.frame_opciones, text=opcion_display, variable=self.opciones_var, value=opcion)
             rb.pack(anchor="w")
         
-        # Mostrar u ocultar el botón "Rehacer Pregunta Actual"
-        # Solo mostrarlo si la pregunta actual es normalidad o varianzas_iguales
+        # Lógica para mostrar u ocultar el botón "Rehacer Pregunta Actual"
         if self.pregunta_actual_id in ['normalidad', 'varianzas_iguales']:
-             # Si no está ya empaquetado, lo empaquetamos
-             if self.boton_rehacer.winfo_ismapped() == 0: # Check if it's currently hidden
-                self.boton_rehacer.pack(pady=5)
+            # Asegurarse de que el botón se empaquete si no lo está
+            self.boton_rehacer.pack(pady=5)
         else:
-            # Si está empaquetado y no es una de las preguntas relevantes, lo desempaquetamos
-            if self.boton_rehacer.winfo_ismapped() == 1:
-                self.boton_rehacer.pack_forget()
+            # Asegurarse de que el botón se desempaquete si lo está
+            self.boton_rehacer.pack_forget()
 
     def enviar_respuesta(self):
         respuesta_seleccionada = self.opciones_var.get()
@@ -101,34 +98,38 @@ class SistemaExpertoGUI:
                      "- Si el p-valor es mayor a alfa (0.05), las muestras presentan varianzas iguales (Homocedasticidad).\n"
                      "- Si el p-valor es menor o igual a alfa (0.05), las muestras NO presentan varianzas iguales (Heterocedasticidad).\n"
                  ))
-             # Al seleccionar "no_se", simplemente volvemos a mostrar la misma pregunta para que el usuario pueda verificar
-             self.obtener_siguiente_pregunta(pregunta_especifica=self.pregunta_actual_id)
+             # Al seleccionar "no_se", volvemos a mostrar la misma pregunta para que el usuario pueda verificar
+             # Usamos pregunta_especifica_id para forzar que se muestre la pregunta actual
+             self.obtener_siguiente_pregunta(pregunta_especifica_id=self.pregunta_actual_id)
         else:
             # Afirmar la respuesta en Prolog si no es "no_se"
             self.prolog.assertz(f"respuesta({self.pregunta_actual_id}, {respuesta_seleccionada})")
             self.obtener_siguiente_pregunta() # Avanzar a la siguiente pregunta
 
-    # Modificamos obtener_siguiente_pregunta para que pueda recibir un ID específico
-    def obtener_siguiente_pregunta(self, pregunta_especifica=None):
-        if pregunta_especifica:
+    # Modificamos obtener_siguiente_pregunta para que pueda recibir un ID específico para volver a preguntar
+    def obtener_siguiente_pregunta(self, pregunta_especifica_id=None):
+        if pregunta_especifica_id:
             # Si se pide una pregunta específica (ej. después de "no_se" o "rehacer")
-            query_result = list(self.prolog.query(f"pregunta({pregunta_especifica}, Texto, Opciones)"))
+            # Usamos pregunta_completa para asegurar las claves 'Id', 'Texto', 'Opciones'
+            query_result = list(self.prolog.query(f"pregunta_completa({pregunta_especifica_id}, Texto, Opciones)"))
             if query_result:
-                p_info = query_result[0]
-                self.pregunta_actual_id = p_info['Id']
+                p_info = query_result[0] # Siempre será el primer resultado si el ID es único
+                self.pregunta_actual_id = p_info['Id'] # Acceder a la clave 'Id'
                 self.mostrar_pregunta(p_info['Texto'], p_info['Opciones'])
                 return
             else:
-                # Esto no debería pasar si el ID es válido en knowledge_base.pl
-                messagebox.showerror("Error", f"Pregunta específica '{pregunta_especifica}' no encontrada.")
+                # Esto debería capturar si el ID es inválido o no existe en Prolog
+                messagebox.showerror("Error de lógica", f"La pregunta '{pregunta_especifica_id}' no pudo ser encontrada en la base de conocimiento con la estructura esperada (Id, Texto, Opciones).")
                 return
 
         # Si no se pide una pregunta específica, buscamos la siguiente no respondida
-        preguntas_definidas = list(self.prolog.query("pregunta(Id, Texto, Opciones)")) # Consulta correcta
+        # Usamos pregunta_completa para asegurar las claves 'Id', 'Texto', 'Opciones'
+        preguntas_definidas = list(self.prolog.query("pregunta_completa(Id, Texto, Opciones)"))
 
         pregunta_encontrada = False
         for p_info in preguntas_definidas:
-            pregunta_id = p_info['Id']
+            pregunta_id = p_info['Id'] # Esto ahora debe ser robusto
+            # Verifica si esta pregunta ya tiene una respuesta afirmada en Prolog
             respuesta_existente = list(self.prolog.query(f"respuesta({pregunta_id}, Respuesta)"))
             if not respuesta_existente:
                 self.pregunta_actual_id = pregunta_id
@@ -145,7 +146,7 @@ class SistemaExpertoGUI:
             list(self.prolog.query(f"retractall(respuesta({self.pregunta_actual_id}, _))"))
             self.resultado_texto.delete(1.0, tk.END) # Limpiar el área de texto
             # Vuelve a mostrar la pregunta actual
-            self.obtener_siguiente_pregunta(pregunta_especifica=self.pregunta_actual_id)
+            self.obtener_siguiente_pregunta(pregunta_especifica_id=self.pregunta_actual_id)
         else:
             messagebox.showinfo("Información", "No hay una pregunta actual para rehacer.")
 
@@ -176,8 +177,15 @@ class SistemaExpertoGUI:
         self.opciones_var.set("")
         # Llama al predicado reiniciar en Prolog para limpiar todos los hechos dinámicos `respuesta/2`
         self.prolog.query("reiniciar.")
-        # Reinicia el flujo de preguntas desde el principio
-        self.obtener_siguiente_pregunta()
+        # Reinicia el flujo de preguntas desde el principio: la primera pregunta en knowledge_base.pl
+        # Para ello, buscamos la primera pregunta definida en Prolog y la mostramos.
+        primera_pregunta_query = list(self.prolog.query("pregunta_completa(Id, Texto, Opciones)"))
+        if primera_pregunta_query:
+            primer_id = primera_pregunta_query[0]['Id']
+            self.obtener_siguiente_pregunta(pregunta_especifica_id=primer_id)
+        else:
+            messagebox.showerror("Error", "No se encontraron preguntas en la base de conocimiento para reiniciar.")
+        
         # Asegurarse de que el botón de rehacer se oculte al reiniciar
         self.boton_rehacer.pack_forget()
 
