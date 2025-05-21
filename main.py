@@ -80,6 +80,7 @@ class SistemaExpertoGUI:
         self.resultado_texto.delete(1.0, tk.END) # Limpiar cualquier mensaje anterior en el área de texto
 
         if respuesta_seleccionada == "no_se":
+             self.resultado_texto.delete(1.0, tk.END)
              self.resultado_texto.insert(tk.END, "\n\n")
              if self.pregunta_actual_id == "normalidad":
                  self.resultado_texto.insert(tk.END, (
@@ -110,25 +111,22 @@ class SistemaExpertoGUI:
     def obtener_siguiente_pregunta(self, pregunta_especifica_id=None):
         if pregunta_especifica_id:
             # Si se pide una pregunta específica (ej. después de "no_se" o "rehacer")
-            # Usamos pregunta_completa para asegurar las claves 'Id', 'Texto', 'Opciones'
             query_result = list(self.prolog.query(f"pregunta_completa({pregunta_especifica_id}, Texto, Opciones)"))
             if query_result:
-                p_info = query_result[0] # Siempre será el primer resultado si el ID es único
-                self.pregunta_actual_id = p_info['Id'] # Acceder a la clave 'Id'
+                p_info = query_result[0]
+                self.pregunta_actual_id = pregunta_especifica_id
                 self.mostrar_pregunta(p_info['Texto'], p_info['Opciones'])
                 return
             else:
-                # Esto debería capturar si el ID es inválido o no existe en Prolog
-                messagebox.showerror("Error de lógica", f"La pregunta '{pregunta_especifica_id}' no pudo ser encontrada en la base de conocimiento con la estructura esperada (Id, Texto, Opciones).")
+                messagebox.showerror("Error de lógica", f"La pregunta '{pregunta_especifica_id}' no pudo ser encontrada en la base de conocimiento.")
                 return
 
         # Si no se pide una pregunta específica, buscamos la siguiente no respondida
-        # Usamos pregunta_completa para asegurar las claves 'Id', 'Texto', 'Opciones'
         preguntas_definidas = list(self.prolog.query("pregunta_completa(Id, Texto, Opciones)"))
 
         pregunta_encontrada = False
         for p_info in preguntas_definidas:
-            pregunta_id = p_info['Id'] # Esto ahora debe ser robusto
+            pregunta_id = p_info['Id']
             # Verifica si esta pregunta ya tiene una respuesta afirmada en Prolog
             respuesta_existente = list(self.prolog.query(f"respuesta({pregunta_id}, Respuesta)"))
             if not respuesta_existente:
@@ -173,21 +171,37 @@ class SistemaExpertoGUI:
         self.boton_rehacer.pack_forget()
 
     def reiniciar(self):
+        # Limpiar la interfaz
         self.resultado_texto.delete(1.0, tk.END)
         self.opciones_var.set("")
-        # Llama al predicado reiniciar en Prolog para limpiar todos los hechos dinámicos `respuesta/2`
-        self.prolog.query("reiniciar.")
-        # Reinicia el flujo de preguntas desde el principio: la primera pregunta en knowledge_base.pl
-        # Para ello, buscamos la primera pregunta definida en Prolog y la mostramos.
-        primera_pregunta_query = list(self.prolog.query("pregunta_completa(Id, Texto, Opciones)"))
-        if primera_pregunta_query:
-            primer_id = primera_pregunta_query[0]['Id']
+        
+        # Eliminar todas las respuestas almacenadas en Prolog
+        # Usamos retractall directamente en lugar de depender de un predicado reiniciar
+        list(self.prolog.query("retractall(respuesta(_, _))"))
+        
+        # Buscar la primera pregunta definida en la base de conocimiento
+        primera_pregunta = list(self.prolog.query("findall(Id, pregunta_completa(Id, _, _), Ids), Ids = [FirstId|_]"))
+        
+        if primera_pregunta and 'FirstId' in primera_pregunta[0]:
+            primer_id = primera_pregunta[0]['FirstId']
+            self.pregunta_actual_id = None  # Reset el id actual
             self.obtener_siguiente_pregunta(pregunta_especifica_id=primer_id)
         else:
-            messagebox.showerror("Error", "No se encontraron preguntas en la base de conocimiento para reiniciar.")
+            # Si no podemos obtener la primera pregunta con findall, intentamos obtener todas las preguntas
+            # y tomamos la primera
+            preguntas = list(self.prolog.query("pregunta_completa(Id, _, _)"))
+            if preguntas:
+                primer_id = preguntas[0]['Id']
+                self.pregunta_actual_id = None  # Reset el id actual
+                self.obtener_siguiente_pregunta(pregunta_especifica_id=primer_id)
+            else:
+                messagebox.showerror("Error", "No se encontraron preguntas en la base de conocimiento.")
         
         # Asegurarse de que el botón de rehacer se oculte al reiniciar
         self.boton_rehacer.pack_forget()
+        
+        # Mensaje de confirmación
+        messagebox.showinfo("Reinicio", "El sistema ha sido reiniciado exitosamente.")
 
 if __name__ == "__main__":
     root = tk.Tk()
