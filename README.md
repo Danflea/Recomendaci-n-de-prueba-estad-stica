@@ -48,6 +48,49 @@ El proyecto se divide en dos componentes fundamentales que trabajan en conjunto:
 
 Este sistema ofrece una herramienta práctica y fácil de usar para la selección de pruebas estadísticas, combinando el poder de la lógica de Prolog con una interfaz de usuario intuitiva.
 
+Problemas y Soluciones Intentadas para la Generación del Ejecutable (Rama dev)
+Esta sección detalla los desafíos encontrados y las aproximaciones de solución durante el proceso de empaquetado del sistema experto en un archivo ejecutable (.exe) utilizando PyInstaller. La rama main contiene una versión funcional que no está optimizada para ser empaquetada fácilmente, mientras que la rama dev busca lograr un ejecutable autónomo.
+
+Objetivo: Crear un único archivo ejecutable (.exe) de la aplicación Python/Tkinter que integre PySwip y la base de conocimiento de Prolog, de modo que los usuarios puedan ejecutarla sin necesidad de instalar Python o PySwip directamente.
+
+Desafíos Principales:
+
+Errores de Ruta de Archivos (illegal \u or \U sequence y FileNotFoundError):
+
+Problema: Al empaquetar una aplicación Python con PyInstaller, los archivos de soporte (como knowledge_base.pl) se colocan en un directorio temporal (_MEIPASS) durante la ejecución del .exe. El código original no sabía cómo acceder a estos archivos en ese entorno. Además, las rutas de archivo en Windows usan barras invertidas (\), que Python interpreta como secuencias de escape, causando errores si no se manejan correctamente.
+Solución Intentada y Exitosa:
+Implementación de la función resource_path() en main.py. Esta función detecta si la aplicación se ejecuta desde un entorno de PyInstaller (sys._MEIPASS) o desde el script original, y construye la ruta correcta al archivo.
+Normalización de las rutas de archivo (.replace('\\', '/')) antes de pasarlas a PySwip, ya que SWI-Prolog y PySwip prefieren las barras diagonales (/) para las rutas, especialmente en la función prolog.consult().
+Dependencias de SWI-Prolog (Errores de Carga del .exe):
+
+Problema: PySwip es un binding (una interfaz) a la librería de SWI-Prolog. Para que la aplicación empaquetada funcione, no solo necesita PySwip en sí, sino también las librerías dinámicas (DLLs en Windows) de SWI-Prolog. PyInstaller no siempre las detecta automáticamente o no incluye todas las necesarias. Esto se manifestaba con ventanas de error genéricas de Windows al intentar abrir el .exe (ej., image_7b0110.png), sin un mensaje de error claro de Python.
+Solución Intentada y en Progreso (Resolución Parcial/Total):
+Asegurar la instalación de SWI-Prolog: La solución actual depende de que SWI-Prolog esté instalado en el sistema del usuario final y sea accesible a través de la variable de entorno PATH.
+Configuración Explícita en build.py: Se ha modificado el script build.py para:
+Mejorar la detección automática de la ruta de instalación de SWI-Prolog, incluyendo la búsqueda en el PATH del sistema.
+Añadir explícitamente las DLLs críticas de SWI-Prolog (libswipl.dll, swipl.dll, pthreadVC2.dll, libwinpthread-1.dll) al empaquetado de PyInstaller usando la opción --add-binary. Esto garantiza que estas librerías esenciales estén presentes en el ejecutable.
+Problemas Persistentes / Diagnóstico: La persistencia de errores a pesar de añadir DLLs puede indicar:
+Falta de alguna DLL adicional específica para la versión de SWI-Prolog del desarrollador.
+Incompatibilidad entre la versión de SWI-Prolog (32-bit vs. 64-bit) y la versión de Python/PySwip.
+Problemas con la variable de entorno PATH o permisos en el sistema del usuario final.
+Desincronización de la Base de Conocimiento (Lógica del Sistema Experto):
+
+Problema: Durante las iteraciones, la lógica en main.py (cómo se formulan las preguntas, se manejan las respuestas) y la estructura de knowledge_base.pl (uso de IDs numéricos vs. IDs simbólicos, opciones de respuesta) se desincronizaron, causando que la aplicación no funcionara lógicamente incluso en modo de desarrollo.
+Solución Implementada:
+Refactorización de main.py para usar los IDs simbólicos de las preguntas (ej., objetivo, normalidad) tal como se definen en la última versión de knowledge_base.pl.
+Implementación de una lista orden_preguntas en main.py para asegurar un flujo de preguntas lineal y predecible.
+Modificación de main.py para consultar directamente las opciones de cada pregunta desde Prolog (pregunta_completa/3), eliminando la necesidad de diccionarios de opciones codificados rígidamente en Python.
+Ajuste del manejo de la opción "no_se" para que sea consistente entre main.py y knowledge_base.pl.
+Estado Actual en dev:
+
+Con las últimas actualizaciones, la rama dev debería ser capaz de generar un ejecutable que:
+
+Cargue knowledge_base.pl correctamente.
+Presente las preguntas en el orden deseado.
+Maneje las respuestas y derive la prueba sugerida.
+Reinicie el sistema apropiadamente.
+El principal punto de depuración restante es asegurar que PyInstaller empaquete todas las DLLs necesarias de SWI-Prolog para que el .exe funcione en cualquier máquina Windows que tenga SWI-Prolog instalado.
+
 ## Requisitos Previos
 
 - Python 3.8 o superior
